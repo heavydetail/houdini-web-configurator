@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>BluePrint by Heavy Detail</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+    <link rel="shortcut icon" type="image/png" href="/favicon.png" />
+    <link rel="shortcut icon" type="image/png" href="http://example.com/favicon.png" />
+    <script src="bin/jquery-3.4.1.js"></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <link type="text/css" rel="stylesheet" href="styles/main.css" />
+</head>
+
+<body>
+    <div id="info">BluePrint Engine (c) Heavy Detail 2019<br /></div>
+
+    <div id="hou_inputs">
+        <h3>Asset Parameters:</h3>
+        <div id="hou_control_container" class="form-group">
+
+            <span class="param_span">HDA/Model: </span>
+            <select id="model_selector" class="form-control-sm">
+          <option value="GEN_01">Test: Simple Box</option>
+          <option value="GEN_02">Test: 2 Twine Ring</option>
+          <option value="GEN_03">Test: 3 Modular Sofa</option>
+          <option value="GEN_04">Test: 4 TBD</option> </select
+        ><br />
+
+        <span class="param_span">Module Configuration:</span>
+        <input id="sizex" class="form-control-sm" type="text" value="4" /><br />
+<div style="visibility: hidden;">
+        <span class="param_span">Scale:</span>
+        <input id="sizex" class="form-control-sm" type="text" value="4" /><br />
+        <span class="param_span">Twines:</span>
+        <input id="sizey" class="form-control-sm" type="text" value="2" /><br />
+        <span class="param_span">Width</span>
+        <input id="sizez" class="form-control-sm" type="text" value="1.5" /><br />
+        <span class="param_span">Tilt</span>
+        <input id="tilt" class="form-control-sm" type="text" value="1.5" /><br />
+
+</div>
+        <button id="update_model" onclick="call_houdini_regenerate();" class="btn btn-warning btn-sm my-2">
+          Update Model</button
+        ><br />
+        </div>
+        <h3>Shapeways API Settings:</h3>
+        <div id="swa_control_container" class="form-group">
+        
+        <span class="param_span">Material: </span>
+        <select id="material_selector" class="form-control-sm">
+          <option value="Mat1">Material 1</option>
+          <option value="Mat2">Material 2</option> </select><br />
+            <span class="param_span" id="volumecalc">Volume: </span
+        ><span class="param_span" id="volume_span">0 u³</span><br />
+            <span class="param_span" id="volumecalc">Estimated Price: TBD</span
+        ><br />
+        <button onclick="call_shapeways();" class="btn btn-warning btn-sm my-2">Get Quote</button><br />
+        <button onclick="add_to_cart();" class="btn btn-warning btn-sm my-2">Add to Cart</button><br />
+      </div>
+      </div>
+    </div>
+    <div class="hidden_scope">
+      <input id="GLTFfilename" value="" type="text" />
+    </div>
+    <script>
+      if (document.getElementById("GLTFfilename").value == "") {
+        //call_houdini_regenerate();
+      }
+
+      function call_houdini_regenerate() {
+        console.log("Calling Blueprint API");
+
+        jQuery.support.cors = true;
+        var model = $("#model_selector").val();
+        var x = $("#sizex").val();
+        var y = $("#sizey").val();
+        var z = $("#sizez").val();
+        var render = false;
+
+        var settings = {
+          async: true,
+          crossDomain: true,
+          url: "http://127.0.0.1:5000/regenerate",
+          method: "POST",
+          headers: {
+            "content-type": "application/json"
+          },
+          processData: false,
+          data:
+            '{\n\t"hda":"' +
+            model +
+            '" ,\n\t"sizex":' +
+            x +
+            ' ,\n\t"sizey": ' +
+            y +
+            ',\n\t"sizez": ' +
+            z +
+            ',\n\t"render": ' +
+            render +
+            "\n}"
+        };
+
+        $.ajax(settings).done(function(response) {
+          GLTFfilename = response.gltf_filename;
+          console.log(
+            "BluePrint API response: " +
+              response.gltf_filename +
+              " Volume: " +
+              response.volume
+          );
+          $("#volume_span").text(
+            parseFloat(Math.round(response.volume * 100) / 100).toFixed(2) +
+              " unit³"
+          );
+          $("#GLTFfilename").val(GLTFfilename);
+
+        });
+      }
+
+      $(document).ready(function() {
+        call_houdini_regenerate();
+      });
+    </script>
+    <script type="module" id="module_three">
+      import * as THREE from "./threejs/build/three.module.js";
+
+      import Stats from "./threejs/examples/jsm/libs/stats.module.js";
+      import { OrbitControls } from "./threejs/examples/jsm/controls/OrbitControls.js";
+      import { GLTFLoader } from "./threejs/examples/jsm/loaders/GLTFLoader.js";
+      import { RGBELoader } from "./threejs/examples/jsm/loaders/RGBELoader.js";
+      import { EquirectangularToCubeGenerator } from "./threejs/examples/jsm/loaders/EquirectangularToCubeGenerator.js";
+      import { PMREMGenerator } from "./threejs/examples/jsm/pmrem/PMREMGenerator.js";
+      import { PMREMCubeUVPacker } from "./threejs/examples/jsm/pmrem/PMREMCubeUVPacker.js";
+
+      var container, stats, controls;
+      var camera, scene, renderer;
+      var envMap;
+      var GLTFfilename = "";
+      var newGLTF = "";
+      var oldGLTF = "";
+
+      init();
+      animate();
+
+      function init() {
+        container = document.createElement("div");
+        document.body.appendChild(container);
+
+        GLTFfilename = document.getElementById("GLTFfilename").value;
+        //oldGLTF = GLTFfilename;
+        //newGLTF = GLTFfilename;
+        console.log("init: gltf filename: " + GLTFfilename);
+
+        camera = new THREE.PerspectiveCamera(
+          45,
+          window.innerWidth / window.innerHeight,
+          0.25,
+          1000
+        );
+        camera.position.set(-4.8, 4.9, 7.7);
+
+        scene = new THREE.Scene();
+
+        new RGBELoader()
+          .setType(THREE.UnsignedByteType)
+          .setPath("./hdr/")
+          .load("leadenhall_market_2k.hdr", function(texture) {
+            var cubeGenerator = new EquirectangularToCubeGenerator(texture, {
+              resolution: 2048
+            });
+            cubeGenerator.update(renderer);
+
+            var pmremGenerator = new PMREMGenerator(
+              cubeGenerator.renderTarget.texture
+            );
+            pmremGenerator.update(renderer);
+
+            var pmremCubeUVPacker = new PMREMCubeUVPacker(
+              pmremGenerator.cubeLods
+            );
+            pmremCubeUVPacker.update(renderer);
+
+            envMap = pmremCubeUVPacker.CubeUVRenderTarget.texture;
+
+            if (GLTFfilename != "") {
+              loadModel();
+            }
+
+            pmremGenerator.dispose();
+            pmremCubeUVPacker.dispose();
+
+                  //scene.background = cubeGenerator.renderTarget;
+                  //Display Blue(Print) Background
+            
+            //create_background_scene();
+            
+                  //scene.background = new THREE.Color(0x2268ec);
+
+             
+              
+          });
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.gammaOutput = true;
+        renderer.setClearColor(0x000000, 0);
+        container.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, -0.2, -0.2);
+        controls.update();
+
+        window.addEventListener("resize", onWindowResize, false);
+
+        // stats
+        stats = new Stats();
+        $("#stat_container").append(stats.dom);
+        $("#stat_container.div").css("position", "relative");
+        //container.appendChild(stats.dom);
+      }
+
+      function create_background_scene() {
+        new THREE.TextureLoader().load('images/blueprint_01.jpg' , function(texture)
+            {
+             scene.background = texture;  
+            });
+      }
+
+      function loadModel() {
+        //wait for fucking api to load...
+        //while (document.getElementById("GLTFfilename").value == "") {}
+
+        var loader = new GLTFLoader().setPath("geo/");
+        loader.load(GLTFfilename, function(gltf) {
+          gltf.scene.traverse(function(child) {
+            if (child.isMesh) {
+              child.material.envMap = envMap;
+            }
+          });
+
+          scene.add(gltf.scene);
+        });
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function GLTFchanged(_oldGLTF) {
+        //oldGLTF = _oldGLTF;
+
+        //if (oldGLTF == "") return false;
+
+        if (document.getElementById("GLTFfilename").value != null) {
+          newGLTF = document.getElementById("GLTFfilename").value;
+        }
+
+        if (oldGLTF != newGLTF) {
+          console.log(
+            "GLTF changed, reloading model. old: " +
+              oldGLTF +
+              " new: " +
+              newGLTF
+          );
+          document.getElementById("GLTFfilename").value = newGLTF;
+          oldGLTF = newGLTF;
+          GLTFfilename = newGLTF;
+          //clearScene();
+          //init();
+          return true;
+        }
+
+        return false;
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        
+        renderer.render(scene, camera);
+
+        if (GLTFchanged(oldGLTF)) {
+          clearScene();
+          loadModel();
+        }
+
+        stats.update();
+        //console.log("animation running...");
+      }
+
+      function clearScene() {
+        var to_remove = [];
+        scene.dispose();
+        scene = new THREE.Scene();
+        //create_background_scene();
+        //scene.background = new THREE.Color(0x2268ec);
+        /*
+        scene.traverse(function(child) {
+          if (child instanceof THREE.Mesh) {
+            //&& !child.userData.keepMe === true
+            console.log("found something to remove");
+            console.log(child);
+            to_remove.push(child);
+          }
+        });
+
+        for (var i = 0; i < to_remove.length; i++) {
+          scene.remove(to_remove[i]);
+        }*/
+      }
+    </script>
+    <div id="stat_container"></div>
+  </body>
+</html>
